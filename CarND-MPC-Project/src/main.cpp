@@ -77,7 +77,7 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+    //cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -92,7 +92,9 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
           double delta = j[1]["steering_angle"];
-          double a = j[1]["throttle"];
+	  double a = j[1]["throttle"];
+
+	  delta *= -1; // Adjust for negative steering angle
 
 	  // Way-points from the car's perspective
 	  Eigen::VectorXd xvals(ptsx.size());
@@ -106,34 +108,46 @@ int main() {
 	    double y_trans = ptsy[i]-py;
 
 	    // Rotate
-	    xvals[i] = x_trans*cos(-psi) - y_trans*sin(-psi);    
+	    xvals[i] = x_trans*cos(-psi) - y_trans*sin(-psi);
 	    yvals[i] = x_trans*sin(-psi) + y_trans*cos(-psi);
 	  }
-	  
+
 	  auto coeffs = polyfit(xvals, yvals, 3);
-	  
+
 	  double cte = polyeval(coeffs, 0);
 	  double epsi = atan(coeffs[1]);
 
 	  // Latency adjustment
 	  double dt_lat = 0.1;
 	  double x0 = 0;
-	  double y0 = 0; 
+	  double y0 = 0;
 	  double psi0 = 0;
 	  double v0 = v;
 	  double Lf = 2.67;
-	  
+
 	  if (dt_lat>0) {
-	    psi0 += -v*delta/Lf*dt_lat; // Adjust psi (steering angle is negative)
-	    x0   += v*cos(psi0)*dt_lat; 
-	    y0   += v*sin(psi0)*dt_lat;
+	    // Updated using the initial steering angle
+	    x0   += v*cos(delta)*dt_lat;
+	    y0   += v*sin(delta)*dt_lat;
+	    psi0 += v*delta/Lf*dt_lat;
 	    v0   += a*dt_lat;
+
+	    // Using the kinematic update for the cte and epsi
+	    cte += v*sin(delta)*dt_lat;
+	    epsi += v*delta/Lf*dt_lat;
+
+	    // While we can use the kinematic update equations to update CTE and EPSE (as
+	    // suggested by the first reviewer), re-avaluating using the polynomial using
+	    // the updated x0 (from latency) is better as it provides a nonlinear and
+	    // more accurate update.
+	    /*
 	    cte = polyeval(coeffs, x0);
-	    epsi = atan(1*coeffs[1] +       
+	    epsi = atan(1*coeffs[1] +
 			2*coeffs[2]*x0 +
 			3*coeffs[3]*x0*x0);
+	    */
 	      }
-	  
+
 	  // Fill the state and solve for vars
 	  Eigen::VectorXd state(6);
 	  state << x0, y0, psi0, v0, cte, epsi;
@@ -158,7 +172,7 @@ int main() {
 	    next_x_vals.push_back(dn*i);
 	    next_y_vals.push_back(polyeval(coeffs, dn*i));
 	  }
-	  
+
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
@@ -172,12 +186,12 @@ int main() {
 	      mpc_y_vals.push_back(vars[i]);
 	    }
 	  }
-	  
+
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
-	  
+
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
