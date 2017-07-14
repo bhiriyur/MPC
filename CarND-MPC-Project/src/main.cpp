@@ -91,6 +91,8 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta = j[1]["steering_angle"];
+          double a = j[1]["throttle"];
 
 	  // Way-points from the car's perspective
 	  Eigen::VectorXd xvals(ptsx.size());
@@ -111,14 +113,34 @@ int main() {
 	  auto coeffs = polyfit(xvals, yvals, 3);
 	  
 	  double cte = polyeval(coeffs, 0);
-	  double epsi = -atan(coeffs[1]);
+	  double epsi = atan(coeffs[1]);
 
+	  // Latency adjustment
+	  double dt_lat = 0.1;
+	  double x0 = 0;
+	  double y0 = 0; 
+	  double psi0 = 0;
+	  double v0 = v;
+	  double Lf = 2.67;
+	  
+	  if (dt_lat>0) {
+	    psi0 += -v*delta/Lf*dt_lat; // Adjust psi (steering angle is negative)
+	    x0   += v*cos(psi0)*dt_lat; 
+	    y0   += v*sin(psi0)*dt_lat;
+	    v0   += a*dt_lat;
+	    cte = polyeval(coeffs, x0);
+	    epsi = atan(1*coeffs[1] +       
+			2*coeffs[2]*x0 +
+			3*coeffs[3]*x0*x0);
+	      }
+	  
 	  // Fill the state and solve for vars
 	  Eigen::VectorXd state(6);
-	  state << 0.0, 0.0, 0.0, v, cte, epsi;
+	  state << x0, y0, psi0, v0, cte, epsi;
+
 	  auto vars = mpc.Solve(state, coeffs);
 
-          double steer_value    = -vars[0];
+          double steer_value    =  -vars[0]; // Steering angle is negative in rotated coordinates
           double throttle_value =  vars[1];
 
           json msgJson;
@@ -127,12 +149,12 @@ int main() {
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
-          //Display the waypoints/reference line
+          //Display the waypoints/reference line (Yellow line)
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 	  int npoints = 10;
 	  double dn = 5.0;
-	  for (int i = 2; i < npoints+2; ++i) {
+	  for (int i = 1; i < npoints+2; ++i) {
 	    next_x_vals.push_back(dn*i);
 	    next_y_vals.push_back(polyeval(coeffs, dn*i));
 	  }
@@ -140,7 +162,7 @@ int main() {
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
-	  //Display the MPC predicted trajectory 
+	  //Display the MPC predicted trajectory (Green line)
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 	  for (size_t i = 2; i < vars.size(); ++i) {
@@ -165,7 +187,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(00));
+          this_thread::sleep_for(chrono::milliseconds(int(dt_lat*1000)));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {

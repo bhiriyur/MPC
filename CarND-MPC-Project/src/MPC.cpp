@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // Set the timestep length and duration
-size_t N = 10;
-double dt = 0.1;
+size_t N = 15;
+double dt = 0.15;
 
 // Start-indices for the various values
 size_t x_start     = 0;                    // N values
@@ -26,7 +26,7 @@ const double Lf = 2.67;
 // The reference velocity is set between 40 - 100 mph.
 double ref_cte  = 0;
 double ref_epsi = 0;
-double ref_v    = 100;
+double ref_v    = 80;
 
 class FG_eval {
  public:
@@ -157,7 +157,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   double v    = state[3];
   double cte  = state[4];
   double epsi = state[5];
-  
+
+
   size_t n_vars = N*6 + (N-1)*2;
   size_t n_constraints = N*6;
 
