@@ -136,7 +136,7 @@ alt="Track 1 Performance" width="480" height="360" border="10" /></a>
 
 The result above was obtained at peak speed = 80 MPH which provided a smooth and stable result.
 I have also run the model at 100 MPH which sometimes resulted in some unstabilities (which can
-perhaps be reduced by changing some model parameters which are described below).
+perhaps be reduced by changing some model parameters which are described above).
 
 
 ## Dependencies
