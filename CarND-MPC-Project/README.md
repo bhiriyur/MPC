@@ -3,6 +3,142 @@ Self-Driving Car Engineer Nanodegree Program
 
 ---
 
+## Introduction
+In this project, we enabled the simulated self-driving car to drive around a race-track by using
+model predictive control (MPC). A bare program framework was provided as part of the project.
+I modified main.cpp and MPC.cpp to implement the controller.
+
+### Model Description
+We used a kinematic model that takes into account the changes in steering angle (delta) and
+throttle (a) on the temporal state of the car (at N fixed time intervals of step dt).
+This temporal state is compared against the desired path (provided in terms of waypoints
+along the center of the lane) and the deviations are minimized by an external solver.
+In addition to the above errors, the actuator controls as well as sudden changes in
+actuator controls are minimised.
+
+### Selection of N and dt
+I tried various values of N and dt and settled on the following:
+* N = 15
+* dt = 0.15
+
+Initially for the model without latency, even N = 10 and dt = 0.1 provided a fairly smooth
+response even at 100 mph. However with latency of 0.1 seconds, I had to increase dt to 0.15
+and also consider a greater number of points for good results.
+
+The other set of parameters that can be varied are the weights corresponding to different errors.
+Following are the weights (and errors) used in my model:
+
+```
+    // Weights for the cost function
+    const double w_cte    = 1000;
+    const double w_epsi   = 1000;
+    const double w_dv     = 1;
+    const double w_delta  = 100;
+    const double w_a      = 10;
+    const double w_ddelta = 10;
+    const double w_da     = 10;
+    
+    // Initialize
+    fg[0] = 0;
+
+    for (size_t t = 0; t < N; t++) {
+      // Minimize cross-track error
+      fg[0] += w_cte  * CppAD::pow(vars[cte_start + t], 2);
+
+      // Minimize error in direction
+      fg[0] += w_epsi * CppAD::pow(vars[epsi_start + t], 2);
+
+      // Minimize deviation from reference velocity
+      fg[0] += w_dv * CppAD::pow(vars[v_start + t] - ref_v, 2);
+    }
+
+    for (unsigned int t = 0; t < N - 1; t++) {
+      // Minimize use of steering
+      fg[0] += w_delta * CppAD::pow(vars[delta_start + t], 2);
+
+      // Minimize use of throttle
+      fg[0] += w_a * CppAD::pow(vars[a_start + t], 2);
+    }
+
+    for (unsigned int t = 0; t < N - 2; t++) {
+      // Minimize sudden turns
+      fg[0] += w_ddelta * CppAD::pow(vars[delta_start + t + 1] -
+				     vars[delta_start + t], 2);
+
+      // Minimize sudden accelerations or braking
+      fg[0] += w_da * CppAD::pow(vars[a_start + t + 1] -
+				 vars[a_start + t], 2);
+
+```
+It is possible that with a different combination of weights, N and dt, I can obtain a smoother
+and faster response around the track.
+
+### Preprocessing
+
+Before passing the state and the coefficients to the MPC, I first perform a coordinate transformation
+and translation such that my origin (0, 0) is at the position of the car and the orientation (facing forward)
+corresponds to a horizontal X-axis. The polynomial fit is obtained with this transformed coordinate system.
+
+```
+  // Let's fill in the waypoints information by translating to origin
+  // and rotating the coordinate system to make the xvals horizontal
+  for (size_t i = 0; i < ptsx.size(); ++i) {
+    // Translate
+    double x_trans = ptsx[i]-px;
+    double y_trans = ptsy[i]-py;
+
+    // Rotate
+    xvals[i] = x_trans*cos(-psi) - y_trans*sin(-psi);    
+    yvals[i] = x_trans*sin(-psi) + y_trans*cos(-psi);
+  }
+  
+  auto coeffs = polyfit(xvals, yvals, 3);
+  
+  double cte = polyeval(coeffs, 0);
+  double epsi = atan(coeffs[1]);
+
+```
+
+### Accounting for latency
+To account for latency, I modified the initial state passed to the MPC to account for the elapsed
+time at the initial state. I basically applied the same kinematic equations to my origin in the
+rotated coordinate system.
+
+```
+  // Latency adjustment
+  double dt_lat = 0.1;
+  double x0 = 0;
+  double y0 = 0; 
+  double psi0 = 0;
+  double v0 = v;
+  double Lf = 2.67;
+  
+  if (dt_lat>0) {
+    psi0 += -v*delta/Lf*dt_lat; // Adjust psi (steering angle is negative)
+    x0   += v*cos(psi0)*dt_lat; 
+    y0   += v*sin(psi0)*dt_lat;
+    v0   += a*dt_lat;
+    cte = polyeval(coeffs, x0);
+    epsi = atan(1*coeffs[1] +       
+		2*coeffs[2]*x0 +
+		3*coeffs[3]*x0*x0);
+      }
+
+```
+
+### Final Result
+
+[YouTube Link](https://youtu.be/7mxe0VpYe_U)
+
+<a href="http://www.youtube.com/watch?feature=player_embedded&v=7mxe0VpYe_U"
+target="_blank"><img src="http://img.youtube.com/vi/7mxe0VpYe_U/0.jpg"
+alt="Track 1 Performance" width="480" height="360" border="10" /></a>
+
+The result above was obtained at peak speed = 80 MPH which provided a smooth and stable result.
+I have also run the model at 100 MPH which sometimes resulted in some unstabilities (which can
+perhaps be reduced by changing some model parameters which are described below).
+
+
 ## Dependencies
 
 * cmake >= 3.5
