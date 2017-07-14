@@ -104,24 +104,40 @@ To account for latency, I modified the initial state passed to the MPC to accoun
 time at the initial state. I basically applied the same kinematic equations to my origin in the
 rotated coordinate system.
 
+**Edit**
+Based on the Udacity reviewer's comments' I have revised the latency update
+equations. For CTE and EPSI updates, please also see code comments below.
+
 ```
   // Latency adjustment
   double dt_lat = 0.1;
   double x0 = 0;
-  double y0 = 0; 
+  double y0 = 0;
   double psi0 = 0;
   double v0 = v;
   double Lf = 2.67;
-  
+
   if (dt_lat>0) {
-    psi0 += -v*delta/Lf*dt_lat; // Adjust psi (steering angle is negative)
-    x0   += v*cos(psi0)*dt_lat; 
-    y0   += v*sin(psi0)*dt_lat;
+    // Updated using the initial steering angle
+    x0   += v*cos(delta)*dt_lat;
+    y0   += v*sin(delta)*dt_lat;
+    psi0 += v*delta/Lf*dt_lat;
     v0   += a*dt_lat;
+
+    // Using the kinematic update for the cte and epsi
+    cte += v*sin(delta)*dt_lat;
+    epsi += v*delta/Lf*dt_lat;
+
+    // While we can use the kinematic update equations to update CTE and EPSE (as
+    // suggested by the first reviewer), re-avaluating using the polynomial using
+    // the updated x0 (from latency) is better as it provides a nonlinear and
+    // more accurate update.
+    /*
     cte = polyeval(coeffs, x0);
-    epsi = atan(1*coeffs[1] +       
+    epsi = atan(1*coeffs[1] +
 		2*coeffs[2]*x0 +
 		3*coeffs[3]*x0*x0);
+    */
       }
 
 ```
